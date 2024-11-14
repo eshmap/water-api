@@ -1,25 +1,60 @@
 const express = require('express');
+const bcrypt = require('bcrypt');
+const prisma = require('../prismaClient'); // Import your Prisma client
 const router = express.Router();
+const multer = require('multer');
+const upload = multer();  // Use the default memory storage for form-data parsing
 
 // Temporary in-memory store for users (use a database in production)
 let users = [];
 let sessions = {}; // Store user sessions
 
-// Signup route (POST /users/signup)
-router.post('/signup', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ message: "Username and password are required" });
+// POST /users/signup
+router.post('/signup', upload.none(), async (req, res) => {
+  console.log(req.body);  // Log the form data to debug
+
+  const { email, password, first_name, last_name } = req.body;
+
+  if (!email || !password || !first_name || !last_name) {
+    return res.status(400).json({ error: 'All fields are required.' });
   }
 
-  // Check if user already exists
-  if (users.find(user => user.username === username)) {
-    return res.status(400).json({ message: "User already exists" });
-  }
+  try {
+    // Check if the user already exists
+    const existingUser = await prisma.customer.findUnique({
+      where: { email },
+    });
 
-  const newUser = { username, password }; // In production, hash the password
-  users.push(newUser);
-  res.status(201).json({ message: "User created successfully", username });
+    if (existingUser) {
+      return res.status(400).json({ error: 'User already exists.' });
+    }
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10); // 10 is the salt rounds
+
+    // Save the new user to the database
+    const newUser = await prisma.customer.create({
+      data: {
+        email,
+        password: hashedPassword,
+        first_name,
+        last_name,
+      },
+    });
+
+    // Respond with the new user (omit password for security)
+    res.status(201).json({
+      user: {
+        customer_id: newUser.customer_id,
+        email: newUser.email,
+        first_name: newUser.first_name,
+        last_name: newUser.last_name,
+      },
+    });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
 });
 
 // Login route (POST /users/login)
