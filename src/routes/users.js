@@ -2,8 +2,21 @@ const express = require('express');
 const bcrypt = require('bcrypt');
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
+const passwordValidator = require('password-validator');
 
 const router = express.Router();
+
+// Set up the password schema
+const passwordSchema = new passwordValidator();
+
+// Define password rules
+passwordSchema
+    .is().min(8)                                     // Minimum length 8
+    .is().max(20)                                    // Maximum length 20
+    .has().uppercase()                               // Must have at least 1 uppercase letter
+    .has().lowercase()                               // Must have at least 1 lowercase letter
+    .has().digits()                                  // Must have at least 1 digit
+    .has().not().spaces();                           // No spaces allowed
 
 let users = [];
 let sessions = {}; // Store user sessions
@@ -12,8 +25,18 @@ let sessions = {}; // Store user sessions
 router.post('/signup', async (req, res) => {
   const { email, password, first_name, last_name } = req.body; // Access form data
 
+  // Check if any fields are missing
   if (!email || !password || !first_name || !last_name) {
     return res.status(400).json({ error: 'All fields are required.' });
+  }
+
+  // Validate the password with the schema
+  const isPasswordValid = passwordSchema.validate(password);
+
+  if (!isPasswordValid) {
+    return res.status(400).json({
+      error: 'Password must be at least 8 characters long, contain an uppercase letter, a lowercase letter, and a number, and must not contain spaces.',
+    });
   }
 
   try {
@@ -25,6 +48,7 @@ router.post('/signup', async (req, res) => {
       return res.status(409).json({ error: 'Email already in use.' });
     }
 
+    // Hash the password before saving it to the database
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = await prisma.customer.create({
