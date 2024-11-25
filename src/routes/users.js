@@ -44,58 +44,73 @@ router.post('/signup', async (req, res) => {
 });
 
 
-// POST /users/login
+// Login Route
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body; // Access form data
+  const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ error: 'Email and password are required.' });
+    return res.status(400).json({ error: 'All fields are required.' });
   }
 
   try {
+    // Find the user by email
     const user = await prisma.customer.findUnique({
-      where: {
-        email: email,
-      },
+      where: { email },
     });
 
     if (!user) {
       return res.status(404).json({ error: 'User not found.' });
     }
 
+    // Compare passwords
     const isPasswordValid = await bcrypt.compare(password, user.password);
 
     if (!isPasswordValid) {
       return res.status(401).json({ error: 'Invalid password.' });
     }
 
-    return res.status(200).json({ email: user.email });
+    // Add user data to session
+    req.session.user = {
+      customer_id: user.customer_id,
+      email: user.email,
+      first_name: user.first_name,
+      last_name: user.last_name,
+    };
 
-  } catch (err) {
-    return res.status(500).json({ error: 'Internal server error.' });
+    res.status(200).json({
+      message: 'Login successful',
+      user: req.session.user,
+    });
+  } catch (error) {
+    console.error('Login error:', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 });
 
 
-// Logout route (POST /users/logout)
+// Logout route
 router.post('/logout', (req, res) => {
-  const { sessionId } = req.cookies;
-  if (!sessions[sessionId]) {
-    return res.status(400).json({ message: "Session not found" });
+  if (req.session.user) {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error('Logout error:', err);
+        return res.status(500).json({ error: 'Failed to log out' });
+      }
+      res.clearCookie('connect.sid'); // Clear the session cookie
+      res.status(200).json({ message: 'Logout successful' });
+    });
+  } else {
+    res.status(401).json({ error: 'No user logged in' });
   }
-
-  delete sessions[sessionId]; // Destroy the session
-  res.clearCookie('sessionId');  // Clear the cookie
-  res.status(200).json({ message: "Logged out successfully" });
 });
 
+// Get session route
 router.get('/getSession', (req, res) => {
-  const { sessionId } = req.cookies;
-  if (!sessions[sessionId]) {
-    return res.status(400).json({ message: "Session not found" });
+  if (req.session.user) {
+    res.status(200).json(req.session.user);
+  } else {
+    res.status(401).json({ error: 'Not logged in' });
   }
-
-  res.status(200).json({ message: "Session active", username: sessions[sessionId] });
 });
 
 module.exports = router;

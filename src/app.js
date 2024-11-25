@@ -11,11 +11,27 @@ dotenv.config();
 const app = express();
 const upload = multer(); // Set up multer (default memory storage)
 
-// Use middlewares
-app.use(cors());
-app.use(cookieParser()); // If you need cookies in your app
-app.use(express.json()); // For handling JSON requests
-app.use(express.urlencoded({ extended: true })); // Handle URL-encoded data
+// Middleware
+app.use(
+  cors({
+    origin: 'http://localhost:3000', // Update with your frontend's origin
+    credentials: true, // Allow credentials to be included in requests
+  })
+);
+app.use(express.json());
+app.use(cookieParser());
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || 'bDh833$&$*@hfsdsd',
+    resave: false,
+    saveUninitialized: true,
+    cookie: {
+      secure: false,
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000,
+    },
+  })
+);
 
 // Global form-data handling middleware
 app.use(upload.none()); // This allows us to handle form data fields
